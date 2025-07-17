@@ -171,11 +171,21 @@ function selectAnswer(points) {
     score += points;
     
     // حفظ الإجابة
-    myAnswers.push({
-        questionIndex: currentQuestion,
-        points: points,
-        answerIndex: getAnswerIndex(points)
-    });
+    if (gameMode === 'partner') {
+        // في وضع الشريك، حفظ الإجابات في partnerAnswers
+        partnerAnswers.push({
+            questionIndex: currentQuestion,
+            points: points,
+            answerIndex: getAnswerIndex(points)
+        });
+    } else {
+        // في الوضع العادي، حفظ في myAnswers
+        myAnswers.push({
+            questionIndex: currentQuestion,
+            points: points,
+            answerIndex: getAnswerIndex(points)
+        });
+    }
     
     currentQuestion++;
     
@@ -188,8 +198,8 @@ function selectAnswer(points) {
             if (gameMode === 'single') {
                 showPartnerInvite();
             } else {
-                // في وضع الشريك، عرض النتائج مباشرة
-                showResults();
+                // في وضع الشريك، حفظ النتيجة وعرضها
+                savePartnerResultAndShow();
             }
         }, 500);
     }
@@ -583,6 +593,102 @@ function calculateCompatibility() {
     return Math.round((matchingAnswers / totalQuestions) * 100);
 }
 
+// حفظ نتيجة الشريك وعرضها
+function savePartnerResultAndShow() {
+    // حفظ النتيجة في localStorage مؤقتاً
+    const resultData = {
+        creatorAnswers: myAnswers,
+        partnerAnswers: partnerAnswers,
+        creatorName: playerNames.name1,
+        partnerName: playerNames.name2,
+        sessionId: sessionId,
+        timestamp: Date.now()
+    };
+    
+    localStorage.setItem(`lovetest_${sessionId}`, JSON.stringify(resultData));
+    
+    // عرض النتائج
+    showResults();
+    
+    // إنشاء رابط للمنشئ لرؤية النتيجة
+    createResultLink();
+}
+
+// إنشاء رابط النتيجة
+function createResultLink() {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+    params.set('result', sessionId);
+    const resultUrl = `${baseUrl}?${params.toString()}`;
+    
+    // إضافة زر لمشاركة النتيجة مع المنشئ
+    setTimeout(() => {
+        const resultsPage = document.getElementById('resultsPage');
+        const shareWithCreatorBtn = document.createElement('button');
+        shareWithCreatorBtn.className = 'btn-primary';
+        shareWithCreatorBtn.textContent = `أرسل النتيجة لـ ${playerNames.name1} 📤`;
+        shareWithCreatorBtn.onclick = () => shareResultWithCreator(resultUrl);
+        
+        const shareButtons = resultsPage.querySelector('.share-buttons') || resultsPage;
+        shareButtons.appendChild(shareWithCreatorBtn);
+    }, 1000);
+}
+
+// مشاركة النتيجة مع المنشئ
+function shareResultWithCreator(resultUrl) {
+    const shareText = `🎉 ${playerNames.name2} أكمل اختبار الحب! اضغط لرؤية نتيجتكما معاً:\n${resultUrl}`;
+    
+    if (navigator.share) {
+        navigator.share({
+            title: 'نتيجة اختبار الحب',
+            text: shareText
+        }).catch(console.error);
+    } else {
+        navigator.clipboard.writeText(shareText)
+            .then(() => {
+                alert('تم نسخ الرابط! أرسله للشريك لرؤية النتيجة 📱');
+            })
+            .catch(() => {
+                prompt('انسخ هذا الرابط وأرسله:', shareText);
+            });
+    }
+}
+
+// التحقق من وجود نتيجة محفوظة
+function checkSavedResult() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const resultId = urlParams.get('result');
+    
+    if (resultId) {
+        const savedData = localStorage.getItem(`lovetest_${resultId}`);
+        if (savedData) {
+            const data = JSON.parse(savedData);
+            
+            // تحميل البيانات
+            myAnswers = data.creatorAnswers;
+            partnerAnswers = data.partnerAnswers;
+            playerNames.name1 = data.creatorName;
+            playerNames.name2 = data.partnerName;
+            gameMode = 'partner';
+            
+            // عرض النتائج مباشرة
+            showResults();
+            
+            // إضافة رسالة توضيحية
+            setTimeout(() => {
+                const resultsPage = document.getElementById('resultsPage');
+                const message = document.createElement('div');
+                message.className = 'result-message';
+                message.innerHTML = `<p>🎯 هذه نتيجتكما النهائية بعد أن أجبتما على الأسئلة!</p>`;
+                resultsPage.insertBefore(message, resultsPage.firstChild);
+            }, 500);
+            
+            return true;
+        }
+    }
+    return false;
+}
+
 // التحقق من وجود دعوة شريك في URL
 function checkPartnerInvite() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -591,20 +697,21 @@ function checkPartnerInvite() {
         const creatorName = decodeURIComponent(urlParams.get('creator') || 'الشريك');
         const partnerName = decodeURIComponent(urlParams.get('partner') || 'أنت');
         const encodedAnswers = urlParams.get('answers');
+        sessionId = urlParams.get('session');
         
-        partnerAnswers = decodeAnswers(encodedAnswers);
+        myAnswers = decodeAnswers(encodedAnswers); // إجابات المنشئ
         
-        if (partnerAnswers.length > 0) {
-            // تعيين الأسماء (الشريك يصبح name1 والمنشئ يصبح name2)
-            playerNames.name1 = partnerName;
-            playerNames.name2 = creatorName;
+        if (myAnswers.length > 0) {
+            // تعيين الأسماء
+            playerNames.name1 = creatorName;
+            playerNames.name2 = partnerName;
             
             // تعيين وضع الشريك
             gameMode = 'partner';
             
             // ملء الحقول
-            document.getElementById('name1').value = partnerName;
-            document.getElementById('name2').value = creatorName;
+            document.getElementById('name1').value = creatorName;
+            document.getElementById('name2').value = partnerName;
             
             // عرض رسالة ترحيب
             showPartnerWelcome(creatorName);
@@ -637,6 +744,9 @@ function showPartnerWelcome(creatorName) {
 
 // تهيئة التطبيق عند التحميل
 document.addEventListener('DOMContentLoaded', function() {
-    // التحقق من وجود دعوة شريك
-    checkPartnerInvite();
+    // التحقق من وجود نتيجة محفوظة أولاً
+    if (!checkSavedResult()) {
+        // إذا لم توجد نتيجة محفوظة، تحقق من دعوة الشريك
+        checkPartnerInvite();
+    }
 });

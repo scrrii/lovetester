@@ -351,12 +351,30 @@ footer {
 
 /* رسالة ترحيب الشريك */
 .partner-welcome {
-    background: linear-gradient(45deg, #fff3e0, #ffe0b2);
-    padding: 25px;
+    background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%);
     border-radius: 15px;
-    margin-bottom: 30px;
-    border: 2px solid #ff9800;
+    padding: 20px;
+    margin-bottom: 20px;
     text-align: center;
+    box-shadow: 0 8px 32px rgba(255, 154, 158, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.result-message {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px;
+    padding: 15px;
+    margin-bottom: 20px;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.result-message p {
+    margin: 0;
+    font-size: 1.1em;
+    font-weight: 500;
 }
 
 .partner-welcome h3 {
