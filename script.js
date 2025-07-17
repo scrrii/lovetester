@@ -2,6 +2,10 @@
 let currentQuestion = 0;
 let score = 0;
 let playerNames = { name1: '', name2: '' };
+let gameMode = 'single'; // 'single' أو 'partner'
+let myAnswers = [];
+let partnerAnswers = [];
+let sessionId = '';
 
 // أسئلة اختبار الحب
 const questions = [
@@ -132,6 +136,11 @@ function startGame() {
     playerNames.name2 = name2;
     currentQuestion = 0;
     score = 0;
+    myAnswers = [];
+    
+    // إنشاء معرف جلسة فريد
+    sessionId = generateSessionId();
+    gameMode = 'single';
     
     showPage('questionsPage');
     displayQuestion();
@@ -160,6 +169,14 @@ function displayQuestion() {
 // اختيار الإجابة
 function selectAnswer(points) {
     score += points;
+    
+    // حفظ الإجابة
+    myAnswers.push({
+        questionIndex: currentQuestion,
+        points: points,
+        answerIndex: getAnswerIndex(points)
+    });
+    
     currentQuestion++;
     
     if (currentQuestion < questions.length) {
@@ -168,15 +185,27 @@ function selectAnswer(points) {
         }, 300);
     } else {
         setTimeout(() => {
-            showResults();
+            if (gameMode === 'single') {
+                showPartnerInvite();
+            } else {
+                showResults();
+            }
         }, 500);
     }
 }
 
 // عرض النتائج
 function showResults() {
-    const percentage = Math.round((score / (questions.length * 10)) * 100);
+    let percentage;
     let result;
+    
+    if (gameMode === 'partner' && partnerAnswers.length > 0) {
+        // حساب التوافق بناءً على تشابه الإجابات
+        percentage = calculateCompatibility();
+    } else {
+        // الطريقة التقليدية
+        percentage = Math.round((score / (questions.length * 10)) * 100);
+    }
     
     // تحديد النتيجة بناءً على النسبة المئوية
     for (const key in results) {
@@ -187,10 +216,19 @@ function showResults() {
         }
     }
     
-    document.getElementById('resultTitle').textContent = 
+    const titleText = gameMode === 'partner' ? 
+        `${playerNames.name1} و ${playerNames.name2}: ${result.title}` :
         `${playerNames.name1} و ${playerNames.name2}: ${result.title}`;
+    
+    document.getElementById('resultTitle').textContent = titleText;
     document.getElementById('lovePercentage').textContent = `${percentage}% ${result.emoji}`;
-    document.getElementById('resultDescription').textContent = result.description;
+    
+    if (gameMode === 'partner') {
+        document.getElementById('resultDescription').textContent = 
+            result.description + '\n\n🎯 هذه النتيجة مبنية على تشابه إجاباتكما!';
+    } else {
+        document.getElementById('resultDescription').textContent = result.description;
+    }
     
     showPage('resultsPage');
     
@@ -251,8 +289,18 @@ function trackShare(percentage) {
 function playAgain() {
     currentQuestion = 0;
     score = 0;
+    myAnswers = [];
+    partnerAnswers = [];
+    gameMode = 'single';
+    sessionId = '';
     document.getElementById('name1').value = '';
     document.getElementById('name2').value = '';
+    
+    // إزالة معاملات URL
+    const url = new URL(window.location);
+    url.search = '';
+    window.history.replaceState({}, document.title, url);
+    
     showPage('startPage');
 }
 
@@ -346,4 +394,206 @@ document.addEventListener('selectstart', function(e) {
     if (e.target.tagName !== 'INPUT') {
         e.preventDefault();
     }
+});
+
+// الدوال المساعدة الجديدة
+
+// إنشاء معرف جلسة فريد
+function generateSessionId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+// الحصول على فهرس الإجابة
+function getAnswerIndex(points) {
+    const currentQ = questions[currentQuestion];
+    return currentQ.answers.findIndex(answer => answer.points === points);
+}
+
+// عرض صفحة دعوة الشريك
+function showPartnerInvite() {
+    // إنشاء رابط للشريك
+    const partnerUrl = createPartnerLink();
+    
+    // إنشاء صفحة دعوة الشريك ديناميكياً
+    const gameContainer = document.getElementById('gameContainer');
+    
+    // إخفاء الصفحات الأخرى
+    const pages = document.querySelectorAll('.page');
+    pages.forEach(page => page.classList.remove('active'));
+    
+    // إنشاء صفحة الدعوة
+    const invitePage = document.createElement('div');
+    invitePage.id = 'invitePage';
+    invitePage.className = 'page active';
+    invitePage.innerHTML = `
+        <div class="result-animation">
+            <div class="fireworks">🎉</div>
+            <div class="fireworks">💕</div>
+            <div class="fireworks">🎊</div>
+        </div>
+        <h2>🎯 انتهيت من الاختبار!</h2>
+        <p>الآن أرسل هذا الرابط لـ <strong>${playerNames.name2}</strong> ليجيب على نفس الأسئلة:</p>
+        <div class="link-container">
+            <input type="text" id="partnerLink" value="${partnerUrl}" readonly>
+            <button onclick="copyPartnerLink()" class="btn-primary">نسخ الرابط 📋</button>
+        </div>
+        <p class="instruction">💡 بعد أن يكمل ${playerNames.name2} الاختبار، ستحصلان على نتيجة مبنية على تشابه إجاباتكما!</p>
+        <div class="share-buttons">
+            <button onclick="sharePartnerLink()" class="btn-share">مشاركة الرابط 📱</button>
+            <button onclick="showMyResults()" class="btn-secondary">عرض نتيجتي فقط 👤</button>
+        </div>
+    `;
+    
+    gameContainer.appendChild(invitePage);
+}
+
+// إنشاء رابط للشريك
+function createPartnerLink() {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+    
+    params.set('session', sessionId);
+    params.set('partner', encodeURIComponent(playerNames.name2));
+    params.set('creator', encodeURIComponent(playerNames.name1));
+    params.set('answers', encodeAnswers(myAnswers));
+    
+    return `${baseUrl}?${params.toString()}`;
+}
+
+// تشفير الإجابات
+function encodeAnswers(answers) {
+    return btoa(JSON.stringify(answers));
+}
+
+// فك تشفير الإجابات
+function decodeAnswers(encodedAnswers) {
+    try {
+        return JSON.parse(atob(encodedAnswers));
+    } catch (e) {
+        return [];
+    }
+}
+
+// نسخ رابط الشريك
+function copyPartnerLink() {
+    const linkInput = document.getElementById('partnerLink');
+    linkInput.select();
+    linkInput.setSelectionRange(0, 99999);
+    
+    navigator.clipboard.writeText(linkInput.value)
+        .then(() => {
+            alert('تم نسخ الرابط! 📋✅');
+        })
+        .catch(() => {
+            prompt('انسخ هذا الرابط:', linkInput.value);
+        });
+}
+
+// مشاركة رابط الشريك
+function sharePartnerLink() {
+    const partnerUrl = document.getElementById('partnerLink').value;
+    const shareText = `💕 ${playerNames.name1} يدعوك لإجراء اختبار الحب معاً!\n\nأجب على نفس الأسئلة واكتشف مدى توافقكما:\n${partnerUrl}\n\n#اختبار_الحب #التوافق`;
+    
+    if (navigator.share) {
+        navigator.share({
+            title: 'اختبار الحب - دعوة شريك',
+            text: shareText
+        }).catch(console.error);
+    } else {
+        navigator.clipboard.writeText(shareText)
+            .then(() => {
+                alert('تم نسخ رسالة الدعوة! يمكنك مشاركتها الآن 📱');
+            })
+            .catch(() => {
+                prompt('انسخ هذه الرسالة وشاركها:', shareText);
+            });
+    }
+}
+
+// عرض نتائجي فقط
+function showMyResults() {
+    gameMode = 'single';
+    showResults();
+}
+
+// حساب التوافق بناءً على تشابه الإجابات
+function calculateCompatibility() {
+    if (myAnswers.length !== partnerAnswers.length) {
+        return 0;
+    }
+    
+    let matchingAnswers = 0;
+    let totalQuestions = myAnswers.length;
+    
+    for (let i = 0; i < totalQuestions; i++) {
+        const myAnswer = myAnswers[i];
+        const partnerAnswer = partnerAnswers[i];
+        
+        // حساب التشابه بناءً على قرب النقاط
+        const pointsDifference = Math.abs(myAnswer.points - partnerAnswer.points);
+        const maxPoints = 10;
+        const similarity = (maxPoints - pointsDifference) / maxPoints;
+        
+        matchingAnswers += similarity;
+    }
+    
+    return Math.round((matchingAnswers / totalQuestions) * 100);
+}
+
+// التحقق من وجود دعوة شريك في URL
+function checkPartnerInvite() {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    if (urlParams.has('session') && urlParams.has('answers')) {
+        const creatorName = decodeURIComponent(urlParams.get('creator') || 'الشريك');
+        const partnerName = decodeURIComponent(urlParams.get('partner') || 'أنت');
+        const encodedAnswers = urlParams.get('answers');
+        
+        partnerAnswers = decodeAnswers(encodedAnswers);
+        
+        if (partnerAnswers.length > 0) {
+            // تعيين الأسماء
+            playerNames.name1 = creatorName;
+            playerNames.name2 = partnerName;
+            
+            // تعيين وضع الشريك
+            gameMode = 'partner';
+            
+            // ملء الحقول
+            document.getElementById('name1').value = creatorName;
+            document.getElementById('name2').value = partnerName;
+            
+            // عرض رسالة ترحيب
+            showPartnerWelcome(creatorName);
+            return true;
+        }
+    }
+    return false;
+}
+
+// عرض رسالة ترحيب للشريك
+function showPartnerWelcome(creatorName) {
+    const startPage = document.getElementById('startPage');
+    const welcomeMessage = document.createElement('div');
+    welcomeMessage.className = 'partner-welcome';
+    welcomeMessage.innerHTML = `
+        <div class="love-animation">
+            <div class="heart">💌</div>
+        </div>
+        <h3>💕 مرحباً!</h3>
+        <p><strong>${creatorName}</strong> دعاك لإجراء اختبار الحب معاً!</p>
+        <p>أجب على نفس الأسئلة لتكتشفا مدى توافقكما 🎯</p>
+    `;
+    
+    startPage.insertBefore(welcomeMessage, startPage.querySelector('.input-group'));
+    
+    // تغيير نص الزر
+    const startButton = startPage.querySelector('.btn-primary');
+    startButton.textContent = 'ابدأ اختبار التوافق 💕';
+}
+
+// تهيئة التطبيق عند التحميل
+document.addEventListener('DOMContentLoaded', function() {
+    // التحقق من وجود دعوة شريك
+    checkPartnerInvite();
 });
