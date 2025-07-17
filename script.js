@@ -188,6 +188,7 @@ function selectAnswer(points) {
             if (gameMode === 'single') {
                 showPartnerInvite();
             } else {
+                // في وضع الشريك، عرض النتائج مباشرة
                 showResults();
             }
         }, 500);
@@ -216,9 +217,7 @@ function showResults() {
         }
     }
     
-    const titleText = gameMode === 'partner' ? 
-        `${playerNames.name1} و ${playerNames.name2}: ${result.title}` :
-        `${playerNames.name1} و ${playerNames.name2}: ${result.title}`;
+    const titleText = `${playerNames.name1} و ${playerNames.name2}: ${result.title}`;
     
     document.getElementById('resultTitle').textContent = titleText;
     document.getElementById('lovePercentage').textContent = `${percentage}% ${result.emoji}`;
@@ -226,6 +225,9 @@ function showResults() {
     if (gameMode === 'partner') {
         document.getElementById('resultDescription').textContent = 
             result.description + '\n\n🎯 هذه النتيجة مبنية على تشابه إجاباتكما!';
+        
+        // إضافة زر مشاركة النتيجة النهائية
+        updateShareButtonForPartnerMode(percentage);
     } else {
         document.getElementById('resultDescription').textContent = result.description;
     }
@@ -235,6 +237,47 @@ function showResults() {
     // إضافة تأثيرات صوتية (اختيارية)
     if (percentage >= 80) {
         celebrateResult();
+    }
+}
+
+// تحديث زر المشاركة لوضع الشريك
+function updateShareButtonForPartnerMode(percentage) {
+    const shareButton = document.querySelector('.btn-share');
+    if (shareButton) {
+        shareButton.onclick = function() {
+            sharePartnerResult(percentage);
+        };
+        shareButton.textContent = 'شارك النتيجة النهائية 🎉';
+    }
+}
+
+// مشاركة النتيجة النهائية للشريكين
+function sharePartnerResult(percentage) {
+    let result;
+    for (const key in results) {
+        const range = results[key].range;
+        if (percentage >= range[0] && percentage <= range[1]) {
+            result = results[key];
+            break;
+        }
+    }
+    
+    const shareText = `🔥 ${playerNames.name1} و ${playerNames.name2} أجريا اختبار الحب معاً وحصلا على ${percentage}%! ${result.emoji}\n\n${result.title}\n\nجرب الاختبار مع شريكك واكتشف مدى توافقكما! 💕\n\n#اختبار_الحب #التوافق #الحب`;
+    
+    if (navigator.share) {
+        navigator.share({
+            title: 'نتيجة اختبار الحب 💕',
+            text: shareText,
+            url: window.location.origin + window.location.pathname
+        }).catch(console.error);
+    } else {
+        navigator.clipboard.writeText(shareText + '\n' + window.location.origin + window.location.pathname)
+            .then(() => {
+                alert('تم نسخ النتيجة! يمكنكما مشاركتها الآن 📱');
+            })
+            .catch(() => {
+                prompt('انسخ هذا النص وشاركه:', shareText + '\n' + window.location.origin + window.location.pathname);
+            });
     }
 }
 
@@ -552,16 +595,16 @@ function checkPartnerInvite() {
         partnerAnswers = decodeAnswers(encodedAnswers);
         
         if (partnerAnswers.length > 0) {
-            // تعيين الأسماء
-            playerNames.name1 = creatorName;
-            playerNames.name2 = partnerName;
+            // تعيين الأسماء (الشريك يصبح name1 والمنشئ يصبح name2)
+            playerNames.name1 = partnerName;
+            playerNames.name2 = creatorName;
             
             // تعيين وضع الشريك
             gameMode = 'partner';
             
             // ملء الحقول
-            document.getElementById('name1').value = creatorName;
-            document.getElementById('name2').value = partnerName;
+            document.getElementById('name1').value = partnerName;
+            document.getElementById('name2').value = creatorName;
             
             // عرض رسالة ترحيب
             showPartnerWelcome(creatorName);
